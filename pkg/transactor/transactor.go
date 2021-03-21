@@ -56,10 +56,10 @@ func (t *Transactor) Transact(ctx context.Context, nonce string, reqIds [5]*big.
 	}
 	receipt, err := bind.WaitMined(ctx, t.client, tx)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "transaction result")
+		return nil, nil, errors.Wrap(err, "transaction result for calculating transaction cost")
 	}
 	if receipt.Status != 1 {
-		return nil, nil, errors.New("unsuccessful transaction status")
+		return nil, nil, errors.New("unsuccessful submitSolution transaction")
 	}
 	return tx, receipt, nil
 }
