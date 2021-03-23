@@ -4,7 +4,9 @@
 package tasker
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"math/rand"
@@ -41,6 +43,7 @@ type Tasker struct {
 	cfg                 *config.Config
 	workSinks           map[string]chan *mining.Work
 	SubmissionCancelers []SubmissionCanceler
+	currentChallenge    *mining.MiningChallenge
 }
 
 func NewTasker(ctx context.Context, logger log.Logger, cfg *config.Config, proxy db.DataServerProxy, client contracts.ETHClient, contract *contracts.ITellor, accounts []*config.Account) (*Tasker, map[string]chan *mining.Work, error) {
@@ -92,6 +95,11 @@ func (mt *Tasker) sendWork(challenge *tellor.ITellorNewChallenge, delay time.Dur
 		level.Warn(mt.logger).Log("msg", "new current variables request ID not correct - contract about to be upgraded")
 		return
 	}
+
+	if mt.currentChallenge != nil && bytes.Equal(challenge.CurrentChallenge[:], mt.currentChallenge.Challenge) {
+		level.Error(mt.logger).Log("msg", "same challenge event recieved from the contract events", "challenge", hex.EncodeToString(mt.currentChallenge.Challenge))
+		return
+	}
 	newChallenge := &mining.MiningChallenge{
 		Challenge:  challenge.CurrentChallenge[:],
 		Difficulty: challenge.Difficulty,
@@ -112,6 +120,8 @@ func (mt *Tasker) sendWork(challenge *tellor.ITellorNewChallenge, delay time.Dur
 			continue
 		}
 	}
+
+	mt.currentChallenge = newChallenge
 
 }
 
@@ -187,6 +197,9 @@ func (mt *Tasker) Start() error {
 				canceler.CancelPendingSubmit()
 			}
 			mt.sendWork(vLog, 0)
+		case <-time.After(20 * time.Minute):
+			level.Warn(mt.logger).Log("msg", "no new events after 20min of inactivity")
+			continue
 		}
 	}
 }
