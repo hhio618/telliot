@@ -5,11 +5,15 @@ package transactor
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/go-kit/kit/log"
@@ -18,8 +22,13 @@ import (
 	tellorCommon "github.com/tellor-io/telliot/pkg/common"
 	"github.com/tellor-io/telliot/pkg/config"
 	"github.com/tellor-io/telliot/pkg/contracts"
+	"github.com/tellor-io/telliot/pkg/contracts/tellor"
 	"github.com/tellor-io/telliot/pkg/db"
+	"github.com/tellor-io/telliot/pkg/logging"
+	"github.com/tellor-io/telliot/pkg/util"
 )
+
+const ComponentName = "transactor"
 
 // Transactor implements the Transactor interface.
 type Transactor struct {
@@ -32,39 +41,61 @@ type Transactor struct {
 	nonce            string
 	reqVals          [5]*big.Int
 	reqIds           [5]*big.Int
+	ctx              context.Context
 }
 
 func NewTransactor(logger log.Logger, cfg *config.Config, proxy db.DataServerProxy,
-	client contracts.ETHClient, account *config.Account, contractInstance *contracts.ITellor) *Transactor {
+	client contracts.ETHClient, account *config.Account, contractInstance *contracts.ITellor) (*Transactor, error) {
+	filterLog, err := logging.ApplyFilter(*cfg, ComponentName, logger)
+	if err != nil {
+		return nil, errors.Wrap(err, "apply filter logger")
+	}
 	return &Transactor{
-		logger:           logger,
+		logger:           log.With(filterLog, "component", ComponentName, "pubKey", account.Address.String()[:6]),
 		cfg:              cfg,
 		proxy:            proxy,
 		client:           client,
 		account:          account,
 		contractInstance: contractInstance,
-	}
+	}, nil
 }
 
 func (t *Transactor) Transact(ctx context.Context, nonce string, reqIds [5]*big.Int, reqVals [5]*big.Int) (*types.Transaction, *types.Receipt, error) {
 	t.nonce = nonce
 	t.reqIds = reqIds
 	t.reqVals = reqVals
+	t.ctx = ctx
+	gasLimit, err := t.EstimateGas()
+	if err != nil {
+		level.Error(t.logger).Log("msg", "getting gasLimit", "err", err)
+	}
+	slotNum, err := t.contractInstance.GetUintVar(nil, util.Keccak256([]byte("_SLOT_PROGRESS")))
+	if err != nil {
+		level.Error(t.logger).Log("msg", "getting _SLOT_PROGRESS", "err", err)
+	} else {
+		level.Info(t.logger).Log("msg", "*********** slot number", "slotNum", slotNum)
+	}
 	tx, err := SubmitContractTxn(ctx, t.logger, t.cfg, t.proxy, t.client, t.contractInstance, t.account, "submitSolution", t.submit)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "submitting the transaction")
 	}
-	receipt, err := bind.WaitMined(ctx, t.client, tx)
+	receipt, err := bind.WaitMined(context.Background(), t.client, tx)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "transaction result")
 	}
 	if receipt.Status != 1 {
 		return nil, nil, errors.New("unsuccessful transaction status")
 	}
+	gasUsed := big.NewInt(int64(receipt.GasUsed))
+	refund := gasLimit - gasUsed.Uint64()
+	if slotNum.Uint64() == 0 || gasUsed.Uint64() > 1000000 {
+		level.Info(t.logger).Log("msg", "*********** gas usage", "gasLimit", gasLimit, "gasUsed", gasUsed, "gasRefund", refund, "txHash", tx.Hash().String())
+	}
 	return tx, receipt, nil
 }
 
 func (t *Transactor) submit(ctx context.Context, options *bind.TransactOpts) (*types.Transaction, error) {
+
 	txn, err := t.contractInstance.SubmitMiningSolution(options,
 		t.nonce,
 		t.reqIds,
@@ -192,6 +223,34 @@ func SubmitContractTxn(
 		return tx, nil
 	}
 	return nil, errors.Wrapf(finalError, "submit txn after 5 attempts ctx:%v", ctxName)
+}
+func (t *Transactor) EstimateGas() (uint64, error) {
+	gasPrice, err := t.client.SuggestGasPrice(context.Background())
+	if err != nil {
+		return 0, err
+	}
+	abiP, err := abi.JSON(strings.NewReader(tellor.TellorABI))
+	if err != nil {
+		return 0, err
+	}
+
+	packed, err := abiP.Pack("submitMiningSolution", t.nonce, t.reqIds, t.reqVals)
+	if err != nil {
+		return 0, err
+	}
+	x := common.HexToAddress(config.TellorAddress)
+	data := ethereum.CallMsg{
+		From:     t.account.Address,
+		To:       &x,
+		GasPrice: gasPrice,
+		Data:     packed,
+	}
+
+	gasLimit, err := t.client.EstimateGas(t.ctx, data)
+	if err != nil {
+		return 0, fmt.Errorf("failed to estimate gas needed: %v", err)
+	}
+	return gasLimit, err
 }
 
 func getInt(data []byte) *big.Int {

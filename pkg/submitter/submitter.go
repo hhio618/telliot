@@ -43,6 +43,7 @@ const ComponentName = "submitter"
 // Transactor takes care of sending transactions over the blockchain network.
 type Transactor interface {
 	Transact(context.Context, string, [5]*big.Int, [5]*big.Int) (*types.Transaction, *types.Receipt, error)
+	EstimateGas() (uint64, error)
 }
 
 type Submitter struct {
@@ -382,7 +383,6 @@ func (s *Submitter) lastSubmit() (time.Duration, *time.Time, error) {
 // Tracking issue https://github.com/tellor-io/TellorCore/issues/101
 func (s *Submitter) saveGasUsed(receipt *types.Receipt) {
 	gasUsed := big.NewInt(int64(receipt.GasUsed))
-
 	slotNum, err := s.contractInstance.GetUintVar(nil, util.Keccak256([]byte("_SLOT_PROGRESS")))
 	if err != nil {
 		level.Error(s.logger).Log("msg", "getting _SLOT_PROGRESS for calculating transaction cost", "err", err)
