@@ -7,3 +7,4 @@ configs/.env
 myconfig.json
 tmp
 scripts/bindings
+.env
