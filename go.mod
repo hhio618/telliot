@@ -11,7 +11,7 @@ require (
 	github.com/cespare/cp v1.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/deckarep/golang-set v1.7.1 // indirect
-	github.com/ethereum/go-ethereum v1.9.26-0.20210104105223-f83fc302a504
+	github.com/ethereum/go-ethereum v0.0.0-00010101000000-000000000000
 	github.com/fjl/memsize v0.0.0-20190710130421-bcb5799ab5e5 // indirect
 	github.com/go-kit/kit v0.10.0
 	github.com/hashicorp/go-multierror v1.1.0
@@ -35,3 +35,5 @@ require (
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/sys v0.0.0-20201231184435-2d18734c6014 // indirect
 )
+
+replace github.com/ethereum/go-ethereum => /home/hhio618/go/pkg/mod/github.com/ethereum/go-ethereum@v1.9.26-0.20210104105223-f83fc302a504/

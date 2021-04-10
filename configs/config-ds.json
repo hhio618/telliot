@@ -1,27 +1,26 @@
 {
-    "GasMax": 10,
-    "DbFile": "tmp/db",
     "ApiFile": "configs/api.json",
     "ManualDataFile": "configs/manualData.json",
     "EnvFile": "configs/.env",
+    "GasMax": 500,
+    "DBFile": "tmp/db2",
     "Mine": {
         "ListenHost": "0.0.0.0",
         "ListenPort": 9090,
-        "ProfitThreshold": 100
+        "ProfitThreshold": 5,
+        "RemoteDBHost": "0.0.0.0",
+        "RemoteDBPort": 5000
     },
+    "ServerWhitelist":[
+        "0x9A006d1D26415fC9b167f21F442F1aC2C969240C"
+    ],
     "Dataserver": {
         "ListenHost": "0.0.0.0",
         "ListenPort": 5000
     },
     "Logger": {
-        "apiOracle": "info",
-        "dataServer": "info",
-        "db": "info",
-        "miner": "info",
-        "rest:": "info",
-        "rpc": "info",
-        "submitter": "info",
-        "tasker": "info",
-        "tracker": "error"
+        "tasker": "debug",
+        "miner:": "debug",
+        "submitter": "debug"
     }
 }

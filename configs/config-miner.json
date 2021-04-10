@@ -1,0 +1,26 @@
+{
+    "ApiFile": "configs/api.json",
+    "ManualDataFile": "configs/manualData.json",
+    "EnvFile": "configs/.env",
+    "GasMax": 500,
+    "DBFile": "tmp/db",
+    "Mine": {
+        "ListenHost": "0.0.0.0",
+        "ListenPort": 9080,
+        "ProfitThreshold": 5,
+        "RemoteDBHost": "0.0.0.0",
+        "RemoteDBPort": 9090
+    },
+    "ServerWhitelist":[
+        "0x9A006d1D26415fC9b167f21F442F1aC2C969240C"
+    ],
+    "Dataserver": {
+        "ListenHost": "0.0.0.0",
+        "ListenPort": 5000
+    },
+    "Logger": {
+        "tasker": "debug",
+        "miner:": "debug",
+        "submitter": "debug"
+    }
+}
