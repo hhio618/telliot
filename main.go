@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"math/big"
 	"math/rand"
 	"os"
@@ -101,31 +102,73 @@ var (
 
 func estimate(ctx context.Context, contract *tellor.ITellor, client *ethclient.Client) {
 	ticker := time.NewTicker(1 * time.Second)
+
+	var (
+		vars struct {
+			Challenge  [32]byte
+			RequestIds [5]*big.Int
+			Difficutly *big.Int
+			Tip        *big.Int
+		}
+		err error
+	)
+	// Getting current challenge.
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		vars, err = contract.GetNewCurrentVariables(nil)
+		if err != nil {
+			log.Print(err)
+			<-ticker.C
+			continue
+		}
+		break
+	}
+	// Getting abi.
+	abiP, err := abi.JSON(strings.NewReader(tellor.TellorABI))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("############################################")
+	log.Printf("Current challenge: %x\n", vars.Challenge)
+	i := 0
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("############################################")
+			return
+		default:
+		}
 		gasPrice, err := client.SuggestGasPrice(ctx)
 		if err != nil {
 			log.Print(err)
 			<-ticker.C
 			continue
 		}
-		abiP, err := abi.JSON(strings.NewReader(tellor.TellorABI))
-		if err != nil {
-			log.Fatal(err)
+		var reqVals [5]*big.Int
+		if i%2 == 0 {
+			r := rand.New(rand.NewSource(time.Now().UnixNano()))
+			reqVals = [5]*big.Int{
+				new(big.Int).SetUint64(r.Uint64()),
+				new(big.Int).SetUint64(r.Uint64()),
+				new(big.Int).SetUint64(r.Uint64()),
+				new(big.Int).SetUint64(r.Uint64()),
+				new(big.Int).SetUint64(r.Uint64()),
+			}
+		} else {
+			reqVals = [5]*big.Int{
+				big.NewInt(math.MaxInt64),
+				big.NewInt(math.MaxInt64),
+				big.NewInt(math.MaxInt64),
+				big.NewInt(math.MaxInt64),
+				big.NewInt(math.MaxInt64),
+			}
 		}
-		vars, err := contract.GetNewCurrentVariables(nil)
-		if err != nil {
-			log.Print(err)
-			<-ticker.C
-			continue
-		}
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		reqVals := [5]*big.Int{
-			new(big.Int).SetUint64(r.Uint64()),
-			new(big.Int).SetUint64(r.Uint64()),
-			new(big.Int).SetUint64(r.Uint64()),
-			new(big.Int).SetUint64(r.Uint64()),
-			new(big.Int).SetUint64(r.Uint64()),
-		}
+
 		packed, err := abiP.Pack("submitMiningSolution", "", vars.RequestIds, reqVals)
 		if err != nil {
 			log.Fatal(err)
@@ -139,11 +182,13 @@ func estimate(ctx context.Context, contract *tellor.ITellor, client *ethclient.C
 		gasUsed, err := client.EstimateGas(ctx, data)
 		if err != nil {
 			log.Printf("while estimate gas: %v", err)
-			<-ticker.C
-			continue
 		}
-		fmt.Println("gasUsed", gasUsed)
-		break
+		if i%2 == 0 {
+			fmt.Println("gasLimit(random)", gasUsed)
+		} else {
+			fmt.Println("gasLimit(maxInt)", gasUsed)
+		}
+		i++
+		<-ticker.C
 	}
-
 }
