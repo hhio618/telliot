@@ -2,7 +2,7 @@
 coverage.out
 
 configs/.env
-
+.env
 /telliot
 myconfig.json
 tmp
